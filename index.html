@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>10-Week Continuous Calendar</title>
+<style>
+  :root {
+    --ink: #252525;
+    --muted: #777;
+    --line: #d8d8d8;
+    --strong-line: #777;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 24px;
+    color: var(--ink);
+    background: #ededed;
+    font-family: Arial, "Noto Sans KR", sans-serif;
+  }
+
+  .toolbar {
+    width: min(1100px, 100%);
+    margin: 0 auto 16px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 14px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+  }
+
+  .api-key-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1 1 600px;
+    min-width: 0;
+  }
+
+  .api-key-wrap label { color: #555; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .api-key-wrap input {
+    flex: 1 1 240px;
+    width: auto;
+    min-width: 130px;
+    max-width: 360px;
+    min-height: 36px;
+    padding: 6px 9px;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    font: inherit;
+  }
+  .api-status {
+    color: #666;
+    font-size: 11px;
+    line-height: 1.35;
+    flex: 0 1 150px;
+    min-width: 80px;
+  }
+
+  .toolbar-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    flex: 0 0 auto;
+  }
+
+  button {
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding: 7px 12px;
+    border: 1px solid #333;
+    border-radius: 4px;
+    background: #333;
+    color: white;
+    cursor: pointer;
+    font: inherit;
+  }
+
+  @media (max-width: 900px) {
+    body { padding: 16px; }
+    .toolbar { flex-wrap: wrap; }
+    .api-key-wrap { flex: 1 1 100%; }
+    .toolbar-actions { width: 100%; justify-content: space-between; }
+    .api-status { flex: 1 1 auto; }
+  }
+
+  @media (max-width: 560px) {
+    body { padding: 10px; }
+    .toolbar { padding: 10px; gap: 10px; }
+    .api-key-wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .api-key-wrap label,
+    .api-key-wrap input,
+    .api-status { grid-column: 1 / -1; }
+    .api-key-wrap button { width: 100%; padding-inline: 8px; }
+    .toolbar-actions { align-items: center; }
+    #printBtn { padding-inline: 10px; }
+  }
+
+  .page {
+    width: 215mm;
+    height: 280mm;
+    margin: 0 auto;
+    padding: 6mm;
+    overflow: hidden;
+    background: white;
+    box-shadow: 0 2px 14px #0002;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .page-header {
+    height: 13mm;
+    flex: 0 0 13mm;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    border-bottom: 0;
+    padding: 0 1mm 2mm;
+  }
+
+  .title {
+    margin: 0;
+    font-size: 17pt;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+  }
+
+  .period {
+    padding-top: 2mm;
+    color: var(--muted);
+    font-size: 8pt;
+    letter-spacing: 0.3px;
+  }
+
+  .calendar {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    height: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    border: 0.3mm solid var(--line);
+    border-top: 0.3mm solid var(--strong-line);
+  }
+
+  .calendar thead { height: 7mm; }
+  .calendar tbody { height: calc(100% - 7mm); }
+
+  .calendar th,
+  .calendar td {
+    width: calc(100% / 7);
+    border: 0.3mm solid var(--line);
+  }
+
+  .calendar th {
+    padding: 0;
+    border-top: 0.3mm solid var(--strong-line);
+    border-bottom-color: var(--strong-line);
+  }
+
+  .weekday {
+    font-size: 9pt;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+  }
+
+  .weekday:first-child { color: #a34b4b; }
+  .weekday:last-child { color: #4b6d9a; }
+
+  .day {
+    padding: 1.2mm 1.5mm;
+    background: white;
+    overflow: hidden;
+    vertical-align: top;
+  }
+
+  .day.sunday { background: #fff3f1; }
+  .day.holiday { background: #fff3f1; }
+  .day.saturday { background: #eef5ff; }
+
+  .calendar td.month-end { border-right-color: var(--strong-line); }
+  .calendar td.month-last-seven { border-bottom-color: var(--strong-line); }
+
+  .date-line {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 2px;
+    white-space: nowrap;
+  }
+
+  .date-number {
+    font-size: 10pt;
+    font-weight: 600;
+  }
+
+  .date-month {
+    color: #888;
+    font-size: 7.5pt;
+  }
+
+  .day.sunday .date-number { color: #bd3038; }
+  .day.holiday .date-number { color: #bd3038; }
+  .day.saturday .date-number { color: #245ec7; }
+  .day.other-month .date-number {
+    color: #888;
+    font-weight: 400;
+  }
+
+  @media print {
+    @page {
+      size: 215mm 280mm;
+      margin: 0;
+    }
+
+    html, body {
+      width: 215mm;
+      height: 280mm;
+      margin: 0;
+      padding: 0;
+      background: white;
+    }
+
+    body {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .toolbar { display: none !important; }
+
+    .page {
+      width: 215mm;
+      height: 280mm;
+      margin: 0;
+      padding: 6mm;
+      box-shadow: none;
+      break-after: avoid;
+      page-break-after: avoid;
+    }
+  }
+</style>
+</head>
+<body>
+  <section class="toolbar">
+    <div class="api-key-wrap">
+      <label for="serviceKey">공휴일 API 키</label>
+      <input id="serviceKey" type="password" autocomplete="off" placeholder="공공데이터포털 서비스키">
+      <button id="saveKeyBtn" type="button">키 저장</button>
+      <button id="clearKeyBtn" type="button">키 삭제</button>
+    </div>
+    <div class="toolbar-actions">
+      <span class="api-status" id="apiStatus"></span>
+      <button id="printBtn" type="button">PDF로 저장 / 인쇄</button>
+    </div>
+  </section>
+
+  <main class="page">
+    <header class="page-header">
+      <h1 class="title" id="calendarTitle"></h1>
+      <div class="period" id="periodLabel"></div>
+    </header>
+    <table class="calendar" id="calendar" aria-label="10주 연속 달력">
+      <thead><tr id="weekdayRow"></tr></thead>
+      <tbody id="calendarBody"></tbody>
+    </table>
+  </main>
+
+<script>
+  const weekdays = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+  const weekdayRow = document.getElementById("weekdayRow");
+  const calendarBody = document.getElementById("calendarBody");
+  const apiStatus = document.getElementById("apiStatus");
+
+  function addDays(date, days) {
+    const result = new Date(date);
+    result.setDate(result.getDate() + days);
+    return result;
+  }
+
+  function formatISO(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  function renderCalendar() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // 오늘이 포함된 주의 일요일을 자동 계산
+    const firstSunday = addDays(today, -today.getDay());
+    const lastDate = addDays(firstSunday, 69);
+
+    weekdayRow.replaceChildren();
+    calendarBody.replaceChildren();
+
+    weekdays.forEach((name) => {
+      const cell = document.createElement("th");
+      cell.scope = "col";
+      cell.className = "weekday";
+      cell.textContent = name;
+      weekdayRow.appendChild(cell);
+    });
+
+    for (let week = 0; week < 10; week++) {
+      const row = document.createElement("tr");
+      for (let weekday = 0; weekday < 7; weekday++) {
+        const i = week * 7 + weekday;
+        const date = addDays(firstSunday, i);
+        const cell = document.createElement("td");
+        cell.className = "day";
+        cell.dataset.date = formatISO(date);
+        const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+        if (date.getDate() === daysInMonth) cell.classList.add("month-end");
+        if (date.getDate() >= daysInMonth - 6) cell.classList.add("month-last-seven");
+        if (weekday === 0) cell.classList.add("sunday");
+        if (weekday === 6) cell.classList.add("saturday");
+
+        const dateLine = document.createElement("div");
+        dateLine.className = "date-line";
+        const number = document.createElement("span");
+        number.className = "date-number";
+        number.textContent = date.getDate();
+        const month = document.createElement("span");
+        month.className = "date-month";
+        month.textContent = (date.getDate() === 1 || i === 0)
+          ? `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, "0")}`
+          : "";
+        dateLine.append(number, month);
+        cell.appendChild(dateLine);
+        row.appendChild(cell);
+      }
+      calendarBody.appendChild(row);
+    }
+
+    document.getElementById("calendarTitle").textContent = `${today.getFullYear()} CALENDAR`;
+    document.getElementById("periodLabel").textContent =
+      `${formatISO(firstSunday)}  —  ${formatISO(lastDate)}`;
+    loadHolidays(firstSunday, lastDate);
+  }
+
+  const serviceKeyInput = document.getElementById("serviceKey");
+  const storedServiceKey = localStorage.getItem("kasiHolidayServiceKey");
+  if (storedServiceKey) serviceKeyInput.value = storedServiceKey;
+
+  document.getElementById("saveKeyBtn").addEventListener("click", () => {
+    let key = serviceKeyInput.value.trim();
+    if (!key) {
+      localStorage.removeItem("kasiHolidayServiceKey");
+      apiStatus.textContent = "저장된 키를 삭제했습니다";
+      return;
+    }
+    localStorage.setItem("kasiHolidayServiceKey", key);
+    apiStatus.textContent = "이 브라우저에 키를 저장했습니다";
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const firstSunday = addDays(today, -today.getDay());
+    loadHolidays(firstSunday, addDays(firstSunday, 69));
+  });
+
+  document.getElementById("clearKeyBtn").addEventListener("click", () => {
+    localStorage.removeItem("kasiHolidayServiceKey");
+    serviceKeyInput.value = "";
+    document.querySelectorAll(".day.holiday").forEach((cell) => cell.classList.remove("holiday"));
+    apiStatus.textContent = "저장된 키를 삭제했습니다";
+  });
+
+  async function loadHolidays(firstDate, lastDate) {
+    let key = serviceKeyInput.value.trim();
+    if (!key) {
+      apiStatus.textContent = "키 입력 후 조회";
+      return;
+    }
+
+    apiStatus.textContent = "공휴일 조회 중…";
+    // 공공데이터포털의 URL 인코딩된 인증키도 입력받을 수 있도록 복원합니다.
+    if (/%[0-9a-f]{2}/i.test(key)) {
+      try { key = decodeURIComponent(key); } catch (_) { /* 입력값 그대로 사용 */ }
+    }
+    const months = new Set();
+    const cursor = new Date(firstDate.getFullYear(), firstDate.getMonth(), 1);
+    const endMonth = new Date(lastDate.getFullYear(), lastDate.getMonth(), 1);
+    while (cursor <= endMonth) {
+      months.add(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`);
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+
+    try {
+      const holidays = new Map();
+      for (const month of months) {
+        const [year, mon] = month.split("-");
+        const url = new URL("https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo");
+        url.search = new URLSearchParams({
+          solYear: year,
+          solMonth: mon,
+          ServiceKey: key,
+          _type: "json",
+          numOfRows: "100"
+        }).toString();
+        const response = await fetch(url, { headers: { Accept: "application/json, application/xml, text/xml" } });
+        const responseText = await response.text();
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        let items = [];
+        let resultCode = "";
+        let resultMessage = "";
+        const content = responseText.trim();
+        if (content.startsWith("{") || content.startsWith("[")) {
+          const data = JSON.parse(content);
+          resultCode = data.response?.header?.resultCode || "";
+          resultMessage = data.response?.header?.resultMsg || "";
+          const rawItems = data.response?.body?.items?.item || [];
+          items = Array.isArray(rawItems) ? rawItems : [rawItems];
+        } else {
+          const xml = new DOMParser().parseFromString(content, "application/xml");
+          if (xml.querySelector("parsererror")) throw new Error("응답을 JSON/XML로 해석할 수 없습니다");
+          resultCode = xml.querySelector("header > resultCode")?.textContent?.trim() || "";
+          resultMessage = xml.querySelector("header > resultMsg")?.textContent?.trim() || "";
+          items = [...xml.querySelectorAll("body > items > item")].map((node) => ({
+            locdate: node.querySelector("locdate")?.textContent?.trim(),
+            dateName: node.querySelector("dateName")?.textContent?.trim(),
+            isHoliday: node.querySelector("isHoliday")?.textContent?.trim()
+          }));
+        }
+        if (resultCode && resultCode !== "00") throw new Error(resultMessage || resultCode);
+        for (const item of items) {
+          if (item.isHoliday === "Y" && item.locdate) holidays.set(String(item.locdate), item.dateName || "공휴일");
+        }
+      }
+
+      document.querySelectorAll(".day[data-date]").forEach((cell) => {
+        const date = cell.dataset.date.replaceAll("-", "");
+        const holidayName = holidays.get(date);
+        cell.classList.toggle("holiday", Boolean(holidayName));
+        if (holidayName) cell.title = holidayName;
+        else cell.removeAttribute("title");
+      });
+      apiStatus.textContent = `공휴일 ${holidays.size}일 반영`;
+    } catch (error) {
+      apiStatus.textContent = "조회 실패: 키·API 응답·브라우저 연결을 확인하세요";
+      console.error("Holiday API request failed:", error);
+    }
+  }
+
+  serviceKeyInput.addEventListener("change", () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const firstSunday = addDays(today, -today.getDay());
+    loadHolidays(firstSunday, addDays(firstSunday, 69));
+  });
+
+  document.getElementById("printBtn").addEventListener("click", () => window.print());
+
+  renderCalendar();
+</script>
+</body>
+</html>
