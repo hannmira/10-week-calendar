@@ -19,7 +19,8 @@
     padding: 24px;
     color: var(--ink);
     background: #ededed;
-    font-family: Arial, "Noto Sans KR", sans-serif;
+    /* 숫자와 영문만 출력되는 달력은 시스템 기본 폰트의 글리프 폭 차이를 피합니다. */
+    font-family: Arial, sans-serif;
   }
 
   .toolbar {
@@ -62,6 +63,8 @@
     flex: 0 1 150px;
     min-width: 80px;
   }
+  #pdfStatus { min-width: 90px; }
+  button:disabled { opacity: 0.65; cursor: wait; }
 
   .toolbar-actions {
     display: flex;
@@ -100,7 +103,7 @@
     .api-status { grid-column: 1 / -1; }
     .api-key-wrap button { width: 100%; padding-inline: 8px; }
     .toolbar-actions { align-items: center; }
-    #printBtn { padding-inline: 10px; }
+    #pdfBtn { padding-inline: 10px; }
   }
 
   .page {
@@ -128,6 +131,7 @@
   .title {
     margin: 0;
     font-size: 17pt;
+    line-height: 1.2;
     font-weight: 600;
     letter-spacing: -0.5px;
   }
@@ -136,37 +140,43 @@
     padding-top: 2mm;
     color: var(--muted);
     font-size: 8pt;
+    line-height: 1.2;
     letter-spacing: 0.3px;
   }
 
   .calendar {
-    flex: 1;
-    min-height: 0;
+    flex: 0 0 255mm;
     width: 100%;
-    height: 100%;
+    height: 255mm;
     table-layout: fixed;
-    border-collapse: collapse;
-    border: 0.3mm solid var(--line);
-    border-top: 0.3mm solid var(--strong-line);
+    border-collapse: separate;
+    border-spacing: 0;
   }
 
   .calendar thead { height: 7mm; }
-  .calendar tbody { height: calc(100% - 7mm); }
+  .calendar tbody { height: 248mm; }
+  .calendar tbody tr { height: 24.8mm; }
 
   .calendar th,
   .calendar td {
     width: calc(100% / 7);
-    border: 0.3mm solid var(--line);
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
   }
+
+  .calendar tr > :first-child { border-left: 1px solid var(--line); }
+  .calendar tr > :last-child { border-right: 1px solid var(--line); }
+  .calendar tbody tr:last-child td { border-bottom: 1px solid var(--line); }
 
   .calendar th {
     padding: 0;
-    border-top: 0.3mm solid var(--strong-line);
-    border-bottom-color: var(--strong-line);
+    border-top: 1px solid var(--strong-line);
+    border-bottom: 1px solid var(--strong-line);
   }
 
   .weekday {
     font-size: 9pt;
+    line-height: 1;
     font-weight: 600;
     letter-spacing: 0.2px;
   }
@@ -185,8 +195,8 @@
   .day.holiday { background: #fff3f1; }
   .day.saturday { background: #eef5ff; }
 
-  .calendar td.month-end { border-right-color: var(--strong-line); }
-  .calendar td.month-last-seven { border-bottom-color: var(--strong-line); }
+  .calendar td.month-end { border-right: 1px solid var(--strong-line); }
+  .calendar td.month-last-seven { border-bottom: 1px solid var(--strong-line); }
 
   .date-line {
     display: flex;
@@ -194,16 +204,19 @@
     justify-content: space-between;
     gap: 2px;
     white-space: nowrap;
+    line-height: 1;
   }
 
   .date-number {
     font-size: 10pt;
+    line-height: 1.1;
     font-weight: 600;
   }
 
   .date-month {
     color: #888;
     font-size: 7.5pt;
+    line-height: 1.1;
   }
 
   .day.sunday .date-number { color: #bd3038; }
@@ -257,7 +270,8 @@
     </div>
     <div class="toolbar-actions">
       <span class="api-status" id="apiStatus"></span>
-      <button id="printBtn" type="button">PDF로 저장 / 인쇄</button>
+      <span class="api-status" id="pdfStatus" aria-live="polite"></span>
+      <button id="pdfBtn" type="button">PDF 만들기</button>
     </div>
   </section>
 
@@ -273,6 +287,8 @@
   </main>
 
 <script>
+  const PDF_LIB_URL = "./pdf-lib.min.js";
+  const HTML2CANVAS_URL = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
   const weekdays = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
   const weekdayRow = document.getElementById("weekdayRow");
   const calendarBody = document.getElementById("calendarBody");
@@ -457,7 +473,72 @@
     loadHolidays(firstSunday, addDays(firstSunday, 69));
   });
 
-  document.getElementById("printBtn").addEventListener("click", () => window.print());
+  function loadScript(src, ready) {
+    if (ready()) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = src;
+      script.onload = resolve;
+      script.onerror = () => reject(new Error("PDF 도구를 불러오지 못했습니다"));
+      document.head.appendChild(script);
+    });
+  }
+
+  async function makePdf() {
+    const button = document.getElementById("pdfBtn");
+    const status = document.getElementById("pdfStatus");
+    button.disabled = true;
+    button.textContent = "PDF 만드는 중…";
+    try {
+      await loadScript(HTML2CANVAS_URL, () => Boolean(window.html2canvas));
+      await loadScript(PDF_LIB_URL, () => Boolean(window.PDFLib));
+      if (document.fonts?.ready) await document.fonts.ready;
+      // 화면의 실제 달력 요소를 캡처하므로 브라우저에서 보이는 배치와 스타일을 유지합니다.
+      const captureWidth = 215 * 96 / 25.4;
+      const captureHeight = 280 * 96 / 25.4;
+      const canvas = await window.html2canvas(document.querySelector(".page"), {
+        backgroundColor: "#ffffff",
+        scale: 3,
+        width: captureWidth,
+        height: captureHeight,
+        windowWidth: captureWidth,
+        windowHeight: captureHeight,
+        onclone: (clonedDocument) => {
+          clonedDocument.documentElement.style.width = "215mm";
+          clonedDocument.documentElement.style.height = "280mm";
+          clonedDocument.body.style.width = "215mm";
+          clonedDocument.body.style.height = "280mm";
+          clonedDocument.body.style.margin = "0";
+          clonedDocument.body.style.padding = "0";
+        },
+        logging: false
+      });
+      const pdf = await PDFLib.PDFDocument.create();
+      const mmToPt = 72 / 25.4;
+      const pageWidth = 215 * mmToPt;
+      const pageHeight = 280 * mmToPt;
+      const pdfPage = pdf.addPage([pageWidth, pageHeight]);
+      const image = await pdf.embedPng(canvas.toDataURL("image/png"));
+      pdfPage.drawImage(image, { x: 0, y: 0, width: pageWidth, height: pageHeight });
+      const bytes = await pdf.save();
+      const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${document.getElementById("calendarTitle").textContent.replace(/\s+/g, "-")}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      status.textContent = "PDF를 저장했습니다";
+    } catch (error) {
+      status.textContent = "PDF 생성 실패: 인터넷 연결을 확인하세요";
+      console.error("PDF generation failed:", error);
+    } finally {
+      button.disabled = false;
+      button.textContent = "PDF 만들기";
+    }
+  }
+  document.getElementById("pdfBtn").addEventListener("click", makePdf);
 
   renderCalendar();
 </script>
