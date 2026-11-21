@@ -199,6 +199,22 @@
 
   .calendar td.month-end { border-right: 1px solid var(--strong-line); }
   .calendar td.month-last-seven { border-bottom: 1px solid var(--strong-line); }
+  .calendar td.month-start {
+    position: relative;
+    z-index: 2;
+    overflow: visible;
+  }
+  .calendar td.month-start::before {
+    content: "";
+    position: absolute;
+    z-index: 2;
+    top: -1px;
+    left: -1px;
+    width: 1px;
+    height: 1px;
+    background: var(--strong-line);
+    pointer-events: none;
+  }
 
   .date-line {
     display: flex;
@@ -337,6 +353,7 @@
         cell.className = "day";
         cell.dataset.date = formatISO(date);
         const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+        if (date.getDate() === 1) cell.classList.add("month-start");
         if (date.getDate() === daysInMonth) cell.classList.add("month-end");
         if (date.getDate() >= daysInMonth - 6) cell.classList.add("month-last-seven");
         if (weekday === 0) cell.classList.add("sunday");
