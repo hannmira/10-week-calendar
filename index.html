@@ -376,7 +376,8 @@
       calendarBody.appendChild(row);
     }
 
-    document.getElementById("calendarTitle").textContent = today.getFullYear();
+    const startMonth = firstSunday.toLocaleString("en-US", { month: "long" });
+    document.getElementById("calendarTitle").textContent = `${firstSunday.getFullYear()} ${startMonth}`;
     document.getElementById("periodLabel").textContent =
       `${formatISO(firstSunday)}  —  ${formatISO(lastDate)}`;
     loadHolidays(firstSunday, lastDate);
